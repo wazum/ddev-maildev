@@ -8,7 +8,7 @@ $hostname = strtok(getenv('DDEV_HOSTNAME'), ',');
 $configurationFile = $projectRoot . '/.mcp.json';
 $stateFile = $projectRoot . '/.ddev/maildev/mcp-state.json';
 
-$entry = [
+$entry = (object) [
     'type' => 'http',
     'url' => sprintf('https://%s:1081/mcp', $hostname),
 ];
@@ -19,13 +19,13 @@ match ($argv[1] ?? 'install') {
     default => fail("Usage: setup-mcp.php [install|remove]\n"),
 };
 
-function install(string $configurationFile, string $stateFile, array $entry): void
+function install(string $configurationFile, string $stateFile, object $entry): void
 {
     $configurationExisted = file_exists($configurationFile);
-    $configuration = $configurationExisted ? readJsonOrFail($configurationFile) : [];
+    $configuration = $configurationExisted ? readJsonOrFail($configurationFile) : new stdClass();
     $state = file_exists($stateFile) ? readJsonOrFail($stateFile) : null;
 
-    $existingEntry = $configuration['mcpServers']['maildev'] ?? null;
+    $existingEntry = $configuration->mcpServers->maildev ?? null;
 
     if ($existingEntry !== null && $state === null) {
         if ($existingEntry == $entry) {
@@ -41,7 +41,7 @@ function install(string $configurationFile, string $stateFile, array $entry): vo
         ));
     }
 
-    if ($existingEntry !== null && $existingEntry != ($state['entry'] ?? null)) {
+    if ($existingEntry !== null && $existingEntry != ($state->entry ?? null)) {
         fail(sprintf(
             "The 'maildev' MCP server in %s was changed since this add-on wrote it.\n"
                 . "Your version has been left unchanged. Delete the entry to let the add-on manage it again.\n",
@@ -49,12 +49,13 @@ function install(string $configurationFile, string $stateFile, array $entry): vo
         ));
     }
 
-    $configuration['mcpServers']['maildev'] = $entry;
+    $configuration->mcpServers ??= new stdClass();
+    $configuration->mcpServers->maildev = $entry;
 
     writeJson($configurationFile, $configuration);
-    writeJson($stateFile, ['entry' => $entry, 'created_file' => !$configurationExisted]);
+    writeJson($stateFile, (object) ['entry' => $entry, 'created_file' => !$configurationExisted]);
 
-    printf("Configured the 'maildev' MCP server at %s\n", $entry['url']);
+    printf("Configured the 'maildev' MCP server at %s\n", $entry->url);
 }
 
 function remove(string $configurationFile, string $stateFile): void
@@ -69,9 +70,9 @@ function remove(string $configurationFile, string $stateFile): void
 
     if (file_exists($configurationFile)) {
         $configuration = readJsonOrFail($configurationFile);
-        $existingEntry = $configuration['mcpServers']['maildev'] ?? null;
+        $existingEntry = $configuration->mcpServers->maildev ?? null;
 
-        if ($existingEntry !== null && $existingEntry != ($state['entry'] ?? null)) {
+        if ($existingEntry !== null && $existingEntry != ($state->entry ?? null)) {
             printf(
                 "The 'maildev' MCP server in %s was changed since this add-on wrote it.\n"
                     . "It has been left in place; delete the entry by hand if you no longer want it.\n",
@@ -81,9 +82,9 @@ function remove(string $configurationFile, string $stateFile): void
             return;
         }
 
-        unset($configuration['mcpServers']['maildev']);
+        unset($configuration->mcpServers->maildev);
 
-        if (($state['created_file'] ?? false) && holdsNothingElse($configuration)) {
+        if (($state->created_file ?? false) && holdsNothingElse($configuration)) {
             unlink($configurationFile);
         } else {
             writeJson($configurationFile, $configuration);
@@ -95,18 +96,19 @@ function remove(string $configurationFile, string $stateFile): void
     echo "Removed the 'maildev' MCP server entry.\n";
 }
 
-function holdsNothingElse(array $configuration): bool
+function holdsNothingElse(object $configuration): bool
 {
-    $servers = $configuration['mcpServers'] ?? [];
-    unset($configuration['mcpServers']);
+    $servers = (array) ($configuration->mcpServers ?? new stdClass());
+    $otherProperties = (array) $configuration;
+    unset($otherProperties['mcpServers']);
 
-    return $servers === [] && $configuration === [];
+    return $servers === [] && $otherProperties === [];
 }
 
-function readJsonOrFail(string $file): array
+function readJsonOrFail(string $file): mixed
 {
     try {
-        return json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
+        return json_decode(file_get_contents($file), false, 512, JSON_THROW_ON_ERROR);
     } catch (JsonException $exception) {
         fail(sprintf(
             "Error: %s is not valid JSON (%s).\nLeaving it unchanged; fix it and try again.\n",
@@ -116,7 +118,7 @@ function readJsonOrFail(string $file): array
     }
 }
 
-function writeJson(string $file, array $data): void
+function writeJson(string $file, object $data): void
 {
     $directory = dirname($file);
 

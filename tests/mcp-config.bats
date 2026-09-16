@@ -301,6 +301,45 @@ JSON
   [ "$output" = "https://context7.example/mcp" ]
 }
 
+@test "remove keeps an emptied mcpServers as a JSON object" {
+  echo '{"mcpServers":{}}' > "${DDEV_APPROOT}/.mcp.json"
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+
+  run php -r '
+    $configuration = json_decode(file_get_contents(getenv("DDEV_APPROOT") . "/.mcp.json"));
+    echo is_object($configuration->mcpServers) ? "object" : "array";
+  '
+  [ "$output" = "object" ]
+}
+
+@test "install keeps genuine JSON arrays as arrays" {
+  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+{
+  "mcpServers": {
+    "local": {
+      "type": "stdio",
+      "command": "some-server",
+      "args": []
+    }
+  }
+}
+JSON
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php -r '
+    $configuration = json_decode(file_get_contents(getenv("DDEV_APPROOT") . "/.mcp.json"));
+    echo is_array($configuration->mcpServers->local->args) ? "array" : "object";
+  '
+  [ "$output" = "array" ]
+}
+
 @test "install fails without modifying a malformed .mcp.json" {
   printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
   local before
