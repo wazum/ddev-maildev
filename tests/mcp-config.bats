@@ -362,6 +362,40 @@ JSON
   [ "$(cat "${DDEV_APPROOT}/.mcp.json")" = "${before}" ]
 }
 
+@test "install preserves the permissions of an existing .mcp.json" {
+  echo '{"mcpServers":{}}' > "${DDEV_APPROOT}/.mcp.json"
+  chmod 640 "${DDEV_APPROOT}/.mcp.json"
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php -r 'printf("%o", fileperms(getenv("DDEV_APPROOT") . "/.mcp.json") & 0777);'
+  [ "$output" = "640" ]
+}
+
+@test "install leaves no temporary files behind" {
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run find "${DDEV_APPROOT}" -name '.mcp-*'
+  [ -z "$output" ]
+}
+
+@test "install reports an actionable error when .mcp.json cannot be written" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores directory permissions"
+
+  chmod 500 "${DDEV_APPROOT}"
+
+  run php "${SCRIPT}" install
+  local status_seen="$status" output_seen="$output"
+
+  chmod 700 "${DDEV_APPROOT}"
+
+  [ "$status_seen" -eq 1 ]
+  [[ "$output_seen" != *"Fatal error"* ]]
+  [[ "$output_seen" == *"Could not write"* ]]
+}
+
 @test "install fails without modifying a malformed .mcp.json" {
   printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
   local before

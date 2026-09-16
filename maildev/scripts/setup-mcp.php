@@ -149,14 +149,36 @@ function writeJson(string $file, object $data): void
 {
     $directory = dirname($file);
 
-    if (!is_dir($directory)) {
-        mkdir($directory, 0o755, true);
+    if (!is_dir($directory) && !@mkdir($directory, 0o755, true)) {
+        fail(sprintf("Could not write %s: %s cannot be created.\n", $file, $directory));
     }
 
-    file_put_contents(
-        $file,
-        json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
-    );
+    $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+    $permissions = file_exists($file) ? fileperms($file) & 0o777 : 0o666 & ~umask();
+
+    $temporaryFile = @tempnam($directory, '.mcp-');
+
+    // tempnam() silently falls back to the system temp directory when $directory
+    // is not writable, which would make the rename below a cross-device copy.
+    if ($temporaryFile === false || dirname($temporaryFile) !== realpath($directory)) {
+        if ($temporaryFile !== false) {
+            @unlink($temporaryFile);
+        }
+
+        fail(sprintf("Could not write %s: no temporary file in %s.\n", $file, $directory));
+    }
+
+    if (@file_put_contents($temporaryFile, $json) !== strlen($json) || !@chmod($temporaryFile, $permissions)) {
+        @unlink($temporaryFile);
+
+        fail(sprintf("Could not write %s: the temporary file could not be prepared.\n", $file));
+    }
+
+    if (!@rename($temporaryFile, $file)) {
+        @unlink($temporaryFile);
+
+        fail(sprintf("Could not write %s: replacing it failed.\n", $file));
+    }
 }
 
 function fail(string $message): never
