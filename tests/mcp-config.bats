@@ -553,6 +553,36 @@ JSON
   [ ! -f "${DDEV_APPROOT}/.ddev/maildev/mcp-state.json" ]
 }
 
+@test "remove refuses a symlinked .mcp.json" {
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  # The link appears after install, so the install-time guard never saw it.
+  mv "${DDEV_APPROOT}/.mcp.json" "${DDEV_APPROOT}/elsewhere.json"
+  ln -s elsewhere.json "${DDEV_APPROOT}/.mcp.json"
+
+  run php "${RUNNER}" "${SCRIPT}" remove
+  assert_contains "$output" "symlink"
+
+  [ -L "${DDEV_APPROOT}/.mcp.json" ]
+
+  run cat "${DDEV_APPROOT}/elsewhere.json"
+  assert_contains "$output" "maildev"
+}
+
+@test "install refuses a symlinked .mcp.json" {
+  echo '{"mcpServers":{}}' > "${DDEV_APPROOT}/elsewhere.json"
+  ln -s "${DDEV_APPROOT}/elsewhere.json" "${DDEV_APPROOT}/.mcp.json"
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 1 ]
+  assert_contains "$output" "symlink"
+
+  [ -L "${DDEV_APPROOT}/.mcp.json" ]
+  run cat "${DDEV_APPROOT}/elsewhere.json"
+  refute_contains "$output" "maildev"
+}
+
 @test "install fails without modifying a malformed .mcp.json" {
   printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
   local before

@@ -17,6 +17,8 @@ match ($argv[1] ?? 'install') {
 
 function install(string $configurationFile, string $stateFile, object $entry): void
 {
+    failOnSymlinkedConfiguration($configurationFile);
+
     $configurationExisted = file_exists($configurationFile);
     $configuration = $configurationExisted ? readConfigurationOrFail($configurationFile) : new stdClass();
     $state = file_exists($stateFile) ? readJsonOrFail($stateFile) : null;
@@ -59,6 +61,8 @@ function install(string $configurationFile, string $stateFile, object $entry): v
 
 function remove(string $configurationFile, string $stateFile): void
 {
+    failOnSymlinkedConfiguration($configurationFile);
+
     if (!file_exists($stateFile)) {
         echo "No add-on owned MCP entry was recorded; leaving .mcp.json alone.\n";
 
@@ -98,6 +102,20 @@ function remove(string $configurationFile, string $stateFile): void
     unlink($stateFile);
 
     echo "Removed the 'maildev' MCP server entry.\n";
+}
+
+// Reading follows the link but the atomic rename replaces it, so either command
+// would turn the user's symlink into a regular file.
+function failOnSymlinkedConfiguration(string $configurationFile): void
+{
+    if (!is_link($configurationFile)) {
+        return;
+    }
+
+    fail(sprintf(
+        "Error: %s is a symlink.\nPoint it at a real file, or retry with the link removed.\n",
+        $configurationFile
+    ));
 }
 
 function maildevEntry(): object
