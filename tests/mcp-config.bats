@@ -252,6 +252,55 @@ JSON
   [ "$output" = "https://edited-by-hand.example/mcp" ]
 }
 
+@test "remove deletes .mcp.json when the add-on created it and nothing else remains" {
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+
+  [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
+}
+
+@test "remove keeps a pre-existing .mcp.json even when it ends up with no servers" {
+  echo '{"mcpServers":{}}' > "${DDEV_APPROOT}/.mcp.json"
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+
+  [ -f "${DDEV_APPROOT}/.mcp.json" ]
+}
+
+@test "remove keeps a created .mcp.json that gained an unrelated server" {
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+{
+  "mcpServers": {
+    "maildev": {
+      "type": "http",
+      "url": "https://myproj.ddev.site:1081/mcp"
+    },
+    "context7": {
+      "type": "http",
+      "url": "https://context7.example/mcp"
+    }
+  }
+}
+JSON
+
+  run php "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+
+  [ -f "${DDEV_APPROOT}/.mcp.json" ]
+  run mcp_json "mcpServers.context7.url"
+  [ "$output" = "https://context7.example/mcp" ]
+}
+
 @test "install fails without modifying a malformed .mcp.json" {
   printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
   local before

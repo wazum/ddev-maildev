@@ -83,12 +83,24 @@ function remove(string $configurationFile, string $stateFile): void
 
         unset($configuration['mcpServers']['maildev']);
 
-        writeJson($configurationFile, $configuration);
+        if (($state['created_file'] ?? false) && holdsNothingElse($configuration)) {
+            unlink($configurationFile);
+        } else {
+            writeJson($configurationFile, $configuration);
+        }
     }
 
     unlink($stateFile);
 
     echo "Removed the 'maildev' MCP server entry.\n";
+}
+
+function holdsNothingElse(array $configuration): bool
+{
+    $servers = $configuration['mcpServers'] ?? [];
+    unset($configuration['mcpServers']);
+
+    return $servers === [] && $configuration === [];
 }
 
 function readJsonOrFail(string $file): array
