@@ -7,9 +7,20 @@ $hostname = strtok(getenv('DDEV_HOSTNAME'), ',');
 
 $file = $projectRoot . '/.mcp.json';
 
-$configuration = file_exists($file)
-    ? json_decode(file_get_contents($file), true)
-    : [];
+$configuration = [];
+
+if (file_exists($file)) {
+    try {
+        $configuration = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
+    } catch (JsonException $exception) {
+        fwrite(STDERR, sprintf(
+            "Error: %s is not valid JSON (%s).\nLeaving it unchanged; fix it and run the install again.\n",
+            $file,
+            $exception->getMessage()
+        ));
+        exit(1);
+    }
+}
 
 $configuration['mcpServers']['maildev'] = [
     'type' => 'http',

@@ -62,3 +62,15 @@ JSON
   [ "$status" -eq 0 ]
   [ "$output" = "https://context7.example/mcp" ]
 }
+
+@test "install fails without modifying a malformed .mcp.json" {
+  printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
+  local before
+  before="$(cat "${DDEV_APPROOT}/.mcp.json")"
+
+  run php "${SCRIPT}" install
+  [ "$status" -ne 0 ]
+  [[ "$output" == *".mcp.json"* ]]
+
+  [ "$(cat "${DDEV_APPROOT}/.mcp.json")" = "${before}" ]
+}
