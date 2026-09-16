@@ -145,39 +145,46 @@ function readConfigurationOrFail(string $file): object
     return $configuration;
 }
 
+// DDEV runs add-on actions behind an error handler that ignores
+// error_reporting(), so `@` suppresses nothing and every warning arrives as an
+// ErrorException. Everything here therefore reports through exceptions.
 function writeJson(string $file, object $data): void
 {
     $directory = dirname($file);
-
-    if (!is_dir($directory) && !@mkdir($directory, 0o755, true)) {
-        fail(sprintf("Could not write %s: %s cannot be created.\n", $file, $directory));
-    }
-
     $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
-    $permissions = file_exists($file) ? fileperms($file) & 0o777 : 0o666 & ~umask();
+    $temporaryFile = $directory . '/.mcp-' . bin2hex(random_bytes(8)) . '.tmp';
+    $temporaryFileCreated = false;
 
-    $temporaryFile = @tempnam($directory, '.mcp-');
-
-    // tempnam() silently falls back to the system temp directory when $directory
-    // is not writable, which would make the rename below a cross-device copy.
-    if ($temporaryFile === false || dirname($temporaryFile) !== realpath($directory)) {
-        if ($temporaryFile !== false) {
-            @unlink($temporaryFile);
+    try {
+        if (!is_dir($directory)) {
+            mkdir($directory, 0o755, true);
         }
 
-        fail(sprintf("Could not write %s: no temporary file in %s.\n", $file, $directory));
-    }
+        $permissions = file_exists($file) ? fileperms($file) & 0o777 : 0o600;
 
-    if (@file_put_contents($temporaryFile, $json) !== strlen($json) || !@chmod($temporaryFile, $permissions)) {
-        @unlink($temporaryFile);
+        // 'x' fails rather than falling back elsewhere, so the replacement below
+        // always stays inside $directory and is a real atomic rename.
+        $fileHandle = fopen($temporaryFile, 'xb');
 
-        fail(sprintf("Could not write %s: the temporary file could not be prepared.\n", $file));
-    }
+        if ($fileHandle === false) {
+            throw new RuntimeException(sprintf('no temporary file could be created in %s', $directory));
+        }
 
-    if (!@rename($temporaryFile, $file)) {
-        @unlink($temporaryFile);
+        $temporaryFileCreated = true;
 
-        fail(sprintf("Could not write %s: replacing it failed.\n", $file));
+        if (fwrite($fileHandle, $json) !== strlen($json)) {
+            throw new RuntimeException('the temporary file could not be written in full');
+        }
+
+        fclose($fileHandle);
+        chmod($temporaryFile, $permissions);
+        rename($temporaryFile, $file);
+    } catch (Throwable $exception) {
+        if ($temporaryFileCreated && file_exists($temporaryFile)) {
+            unlink($temporaryFile);
+        }
+
+        fail(sprintf("Could not write %s: %s.\n", $file, $exception->getMessage()));
     }
 }
 

@@ -9,6 +9,7 @@ setup() {
   ADDON_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." >/dev/null 2>&1 && pwd)"
   export ADDON_ROOT
   export SCRIPT="${ADDON_ROOT}/maildev/scripts/setup-mcp.php"
+  export RUNNER="${ADDON_ROOT}/tests/ddev-action-runner.php"
 
   export DDEV_APPROOT="${BATS_TEST_TMPDIR}/project"
   export DDEV_HOSTNAME="myproj.ddev.site"
@@ -39,7 +40,7 @@ state_json() {
 }
 
 @test "install creates .mcp.json with the maildev entry when no file exists" {
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   run mcp_json "mcpServers.maildev.url"
@@ -59,7 +60,7 @@ state_json() {
 }
 JSON
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   run mcp_json "mcpServers.context7.url"
@@ -68,7 +69,7 @@ JSON
 }
 
 @test "install records the entry it wrote as ownership state" {
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   run state_json "entry.url"
@@ -77,7 +78,7 @@ JSON
 }
 
 @test "install records that it created .mcp.json when none existed" {
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   run state_json "created_file"
@@ -88,7 +89,7 @@ JSON
 @test "install records that it did not create a pre-existing .mcp.json" {
   echo '{"mcpServers":{}}' > "${DDEV_APPROOT}/.mcp.json"
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   run state_json "created_file"
@@ -108,7 +109,7 @@ JSON
 }
 JSON
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -ne 0 ]
   [[ "$output" == *"maildev"* ]]
 
@@ -128,17 +129,17 @@ JSON
 }
 JSON
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   [ ! -f "${DDEV_APPROOT}/.ddev/maildev/mcp-state.json" ]
 }
 
 @test "reinstall leaves an untouched owned entry as it is" {
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   run mcp_json "mcpServers.maildev.url"
@@ -146,12 +147,12 @@ JSON
 }
 
 @test "reinstall updates an owned entry after the project hostname changes" {
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   export DDEV_HOSTNAME="renamed.ddev.site"
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   run mcp_json "mcpServers.maildev.url"
@@ -159,7 +160,7 @@ JSON
 }
 
 @test "reinstall fails when the owned entry was edited by hand" {
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
@@ -173,7 +174,7 @@ JSON
 }
 JSON
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -ne 0 ]
 
   run mcp_json "mcpServers.maildev.url"
@@ -192,10 +193,10 @@ JSON
 }
 JSON
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
-  run php "${SCRIPT}" remove
+  run php "${RUNNER}" "${SCRIPT}" remove
   [ "$status" -eq 0 ]
 
   run mcp_json "mcpServers.maildev"
@@ -214,10 +215,10 @@ JSON
 }
 JSON
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
-  run php "${SCRIPT}" remove
+  run php "${RUNNER}" "${SCRIPT}" remove
   [ "$status" -eq 0 ]
 
   run mcp_json "mcpServers.context7.url"
@@ -226,7 +227,7 @@ JSON
 }
 
 @test "remove preserves a maildev entry that was edited after install" {
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
@@ -240,7 +241,7 @@ JSON
 }
 JSON
 
-  run php "${SCRIPT}" remove
+  run php "${RUNNER}" "${SCRIPT}" remove
   [[ "$output" == *"maildev"* ]]
 
   run mcp_json "mcpServers.maildev.url"
@@ -249,10 +250,10 @@ JSON
 }
 
 @test "remove deletes .mcp.json when the add-on created it and nothing else remains" {
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
-  run php "${SCRIPT}" remove
+  run php "${RUNNER}" "${SCRIPT}" remove
   [ "$status" -eq 0 ]
 
   [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
@@ -261,17 +262,17 @@ JSON
 @test "remove keeps a pre-existing .mcp.json even when it ends up with no servers" {
   echo '{"mcpServers":{}}' > "${DDEV_APPROOT}/.mcp.json"
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
-  run php "${SCRIPT}" remove
+  run php "${RUNNER}" "${SCRIPT}" remove
   [ "$status" -eq 0 ]
 
   [ -f "${DDEV_APPROOT}/.mcp.json" ]
 }
 
 @test "remove keeps a created .mcp.json that gained an unrelated server" {
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
@@ -289,7 +290,7 @@ JSON
 }
 JSON
 
-  run php "${SCRIPT}" remove
+  run php "${RUNNER}" "${SCRIPT}" remove
   [ "$status" -eq 0 ]
 
   [ -f "${DDEV_APPROOT}/.mcp.json" ]
@@ -300,10 +301,10 @@ JSON
 @test "remove keeps an emptied mcpServers as a JSON object" {
   echo '{"mcpServers":{}}' > "${DDEV_APPROOT}/.mcp.json"
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
-  run php "${SCRIPT}" remove
+  run php "${RUNNER}" "${SCRIPT}" remove
   [ "$status" -eq 0 ]
 
   run php -r '
@@ -326,7 +327,7 @@ JSON
 }
 JSON
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   run php -r '
@@ -341,7 +342,7 @@ JSON
   local before
   before="$(cat "${DDEV_APPROOT}/.mcp.json")"
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 1 ]
   [[ "$output" != *"Fatal error"* ]]
   [[ "$output" == *".mcp.json"* ]]
@@ -354,7 +355,7 @@ JSON
   local before
   before="$(cat "${DDEV_APPROOT}/.mcp.json")"
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 1 ]
   [[ "$output" != *"Fatal error"* ]]
   [[ "$output" == *"mcpServers"* ]]
@@ -366,7 +367,7 @@ JSON
   echo '{"mcpServers":{}}' > "${DDEV_APPROOT}/.mcp.json"
   chmod 640 "${DDEV_APPROOT}/.mcp.json"
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   run php -r 'printf("%o", fileperms(getenv("DDEV_APPROOT") . "/.mcp.json") & 0777);'
@@ -374,7 +375,7 @@ JSON
 }
 
 @test "install leaves no temporary files behind" {
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
   run find "${DDEV_APPROOT}" -name '.mcp-*'
@@ -386,7 +387,7 @@ JSON
 
   chmod 500 "${DDEV_APPROOT}"
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   local status_seen="$status" output_seen="$output"
 
   chmod 700 "${DDEV_APPROOT}"
@@ -401,7 +402,7 @@ JSON
   local before
   before="$(cat "${DDEV_APPROOT}/.mcp.json")"
 
-  run php "${SCRIPT}" install
+  run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -ne 0 ]
   [[ "$output" == *".mcp.json"* ]]
 
