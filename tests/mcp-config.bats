@@ -19,19 +19,27 @@ setup() {
   mkdir -p "${DDEV_APPROOT}/.ddev"
 }
 
-# Reads a value out of the generated .mcp.json so assertions stay readable.
-mcp_json() {
+# Reads a dotted path out of a JSON file so assertions stay readable.
+# Exits non-zero when any segment of the path is missing.
+json_at() {
   php -r '
-    $file = getenv("DDEV_APPROOT") . "/.mcp.json";
-    $configuration = json_decode(file_get_contents($file), true);
-    foreach (explode(".", $argv[1]) as $key) {
+    $configuration = json_decode(file_get_contents($argv[1]), true);
+    foreach (explode(".", $argv[2]) as $key) {
       if (!is_array($configuration) || !array_key_exists($key, $configuration)) {
         exit(1);
       }
       $configuration = $configuration[$key];
     }
     echo is_string($configuration) ? $configuration : json_encode($configuration);
-  ' -- "$1"
+  ' -- "$1" "$2"
+}
+
+mcp_json() {
+  json_at "${DDEV_APPROOT}/.mcp.json" "$1"
+}
+
+state_json() {
+  json_at "${DDEV_APPROOT}/.ddev/maildev/mcp-state.json" "$1"
 }
 
 @test "install creates .mcp.json with the maildev entry when no file exists" {
@@ -61,6 +69,35 @@ JSON
   run mcp_json "mcpServers.context7.url"
   [ "$status" -eq 0 ]
   [ "$output" = "https://context7.example/mcp" ]
+}
+
+@test "install records the entry it wrote as ownership state" {
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run state_json "entry.url"
+  [ "$status" -eq 0 ]
+  [ "$output" = "https://myproj.ddev.site:1081/mcp" ]
+}
+
+@test "install records that it created .mcp.json when none existed" {
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run state_json "created_file"
+  [ "$status" -eq 0 ]
+  [ "$output" = "true" ]
+}
+
+@test "install records that it did not create a pre-existing .mcp.json" {
+  echo '{"mcpServers":{}}' > "${DDEV_APPROOT}/.mcp.json"
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run state_json "created_file"
+  [ "$status" -eq 0 ]
+  [ "$output" = "false" ]
 }
 
 @test "install fails without modifying a malformed .mcp.json" {
