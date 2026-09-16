@@ -108,7 +108,17 @@ function holdsNothingElse(object $configuration): bool
 function readJsonOrFail(string $file): object
 {
     try {
-        $decoded = json_decode(file_get_contents($file), false, 512, JSON_THROW_ON_ERROR);
+        $contents = file_get_contents($file);
+    } catch (Throwable $exception) {
+        fail(sprintf(
+            "Error: %s could not be read (%s).\nLeaving it unchanged; fix it and try again.\n",
+            $file,
+            $exception->getMessage()
+        ));
+    }
+
+    try {
+        $decoded = json_decode($contents, false, 512, JSON_THROW_ON_ERROR);
     } catch (JsonException $exception) {
         fail(sprintf(
             "Error: %s is not valid JSON (%s).\nLeaving it unchanged; fix it and try again.\n",
@@ -146,8 +156,8 @@ function readConfigurationOrFail(string $file): object
 }
 
 // DDEV runs add-on actions behind an error handler that ignores
-// error_reporting(), so `@` suppresses nothing and every warning arrives as an
-// ErrorException. Everything here therefore reports through exceptions.
+// error_reporting(), so `@` suppresses nothing and warnings arrive as
+// ErrorException.
 function writeJson(string $file, object $data): void
 {
     $directory = dirname($file);
@@ -162,8 +172,8 @@ function writeJson(string $file, object $data): void
 
         $permissions = file_exists($file) ? fileperms($file) & 0o777 : 0o600;
 
-        // 'x' fails rather than falling back elsewhere, so the replacement below
-        // always stays inside $directory and is a real atomic rename.
+        // 'x' fails instead of falling back elsewhere, keeping the replacement
+        // a real atomic rename inside $directory.
         $fileHandle = fopen($temporaryFile, 'xb');
 
         if ($fileHandle === false) {

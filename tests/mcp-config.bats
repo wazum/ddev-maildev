@@ -374,6 +374,25 @@ JSON
   [ "$output" = "640" ]
 }
 
+@test "install creates a new .mcp.json readable only by its owner" {
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php -r 'printf("%o", fileperms(getenv("DDEV_APPROOT") . "/.mcp.json") & 0777);'
+  [ "$output" = "600" ]
+}
+
+@test "install reports an actionable error when .mcp.json is a directory" {
+  mkdir "${DDEV_APPROOT}/.mcp.json"
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Fatal error"* ]]
+  [[ "$output" == *".mcp.json"* ]]
+
+  [ -d "${DDEV_APPROOT}/.mcp.json" ]
+}
+
 @test "install leaves no temporary files behind" {
   run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
