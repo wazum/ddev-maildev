@@ -17,6 +17,22 @@ setup() {
   mkdir -p "${DDEV_APPROOT}/.ddev"
 }
 
+# A false `[[ ]]` does not fail a bats test, because `[[` is a shell keyword and
+# errexit skips it. These are functions so a failed assertion stops the test.
+assert_contains() {
+  case "$1" in
+    *"$2"*) return 0 ;;
+    *) echo "expected to find '$2' in:" >&2; echo "$1" >&2; return 1 ;;
+  esac
+}
+
+refute_contains() {
+  case "$1" in
+    *"$2"*) echo "expected NOT to find '$2' in:" >&2; echo "$1" >&2; return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 # Exits non-zero when any segment of the path is missing.
 json_at() {
   php -r '
@@ -111,7 +127,7 @@ JSON
 
   run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -ne 0 ]
-  [[ "$output" == *"maildev"* ]]
+  assert_contains "$output" "maildev"
 
   run mcp_json "mcpServers.maildev.url"
   [ "$output" = "https://someone-elses.example/mcp" ]
@@ -242,7 +258,7 @@ JSON
 JSON
 
   run php "${RUNNER}" "${SCRIPT}" remove
-  [[ "$output" == *"maildev"* ]]
+  assert_contains "$output" "maildev"
 
   run mcp_json "mcpServers.maildev.url"
   [ "$status" -eq 0 ]
@@ -344,8 +360,8 @@ JSON
 
   run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 1 ]
-  [[ "$output" != *"Fatal error"* ]]
-  [[ "$output" == *".mcp.json"* ]]
+  refute_contains "$output" "Fatal error"
+  assert_contains "$output" ".mcp.json"
 
   [ "$(cat "${DDEV_APPROOT}/.mcp.json")" = "${before}" ]
 }
@@ -357,8 +373,8 @@ JSON
 
   run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 1 ]
-  [[ "$output" != *"Fatal error"* ]]
-  [[ "$output" == *"mcpServers"* ]]
+  refute_contains "$output" "Fatal error"
+  assert_contains "$output" "mcpServers"
 
   [ "$(cat "${DDEV_APPROOT}/.mcp.json")" = "${before}" ]
 }
@@ -387,8 +403,8 @@ JSON
 
   run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 1 ]
-  [[ "$output" != *"Fatal error"* ]]
-  [[ "$output" == *".mcp.json"* ]]
+  refute_contains "$output" "Fatal error"
+  assert_contains "$output" ".mcp.json"
 
   [ -d "${DDEV_APPROOT}/.mcp.json" ]
 }
@@ -412,8 +428,8 @@ JSON
   chmod 700 "${DDEV_APPROOT}"
 
   [ "$status_seen" -eq 1 ]
-  [[ "$output_seen" != *"Fatal error"* ]]
-  [[ "$output_seen" == *"Could not write"* ]]
+  refute_contains "$output_seen" "Fatal error"
+  assert_contains "$output_seen" "Could not write"
 }
 
 @test "install refuses a hostname that hides another host in userinfo" {
@@ -421,7 +437,7 @@ JSON
 
   run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 1 ]
-  [[ "$output" != *"Fatal error"* ]]
+  refute_contains "$output" "Fatal error"
 
   [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
 }
@@ -476,6 +492,21 @@ JSON
   [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
 }
 
+@test "remove leaves the file alone when the maildev entry is already gone" {
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  echo '{"otherTopLevel": true}' > "${DDEV_APPROOT}/.mcp.json"
+
+  run php "${RUNNER}" "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+  refute_contains "$output" "Fatal error"
+
+  run cat "${DDEV_APPROOT}/.mcp.json"
+  refute_contains "$output" "mcpServers"
+  assert_contains "$output" "otherTopLevel"
+}
+
 @test "install fails without modifying a malformed .mcp.json" {
   printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
   local before
@@ -483,7 +514,7 @@ JSON
 
   run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -ne 0 ]
-  [[ "$output" == *".mcp.json"* ]]
+  assert_contains "$output" ".mcp.json"
 
   [ "$(cat "${DDEV_APPROOT}/.mcp.json")" = "${before}" ]
 }

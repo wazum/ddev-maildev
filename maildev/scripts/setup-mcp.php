@@ -63,21 +63,26 @@ function remove(string $configurationFile, string $stateFile): void
     }
 
     $state = readJsonOrFail($stateFile);
+    $existingEntry = null;
 
     if (file_exists($configurationFile)) {
         $configuration = readConfigurationOrFail($configurationFile);
         $existingEntry = $configuration->mcpServers->maildev ?? null;
+    }
 
-        if ($existingEntry !== null && $existingEntry != ($state->entry ?? null)) {
-            printf(
-                "The 'maildev' MCP server in %s was changed since this add-on wrote it.\n"
-                    . "It has been left in place; delete the entry by hand if you no longer want it.\n",
-                $configurationFile
-            );
+    if ($existingEntry !== null && $existingEntry != ($state->entry ?? null)) {
+        printf(
+            "The 'maildev' MCP server in %s was changed since this add-on wrote it.\n"
+                . "It has been left in place; delete the entry by hand if you no longer want it.\n",
+            $configurationFile
+        );
 
-            return;
-        }
+        return;
+    }
 
+    // Someone else already took the entry out. Touching the file now would only
+    // add an empty 'mcpServers' back to a config the add-on no longer owns.
+    if ($existingEntry !== null) {
         unset($configuration->mcpServers->maildev);
 
         if (($state->created_file ?? false) && holdsNothingElse($configuration)) {
