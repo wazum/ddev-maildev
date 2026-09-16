@@ -42,3 +42,23 @@ mcp_json() {
   [ "$status" -eq 0 ]
   [ "$output" = "https://myproj.ddev.site:1081/mcp" ]
 }
+
+@test "install preserves unrelated servers in an existing .mcp.json" {
+  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://context7.example/mcp"
+    }
+  }
+}
+JSON
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run mcp_json "mcpServers.context7.url"
+  [ "$status" -eq 0 ]
+  [ "$output" = "https://context7.example/mcp" ]
+}
