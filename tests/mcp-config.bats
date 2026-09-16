@@ -100,6 +100,44 @@ JSON
   [ "$output" = "false" ]
 }
 
+@test "install fails on a conflicting maildev entry it does not own" {
+  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+{
+  "mcpServers": {
+    "maildev": {
+      "type": "http",
+      "url": "https://someone-elses.example/mcp"
+    }
+  }
+}
+JSON
+
+  run php "${SCRIPT}" install
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"maildev"* ]]
+
+  run mcp_json "mcpServers.maildev.url"
+  [ "$output" = "https://someone-elses.example/mcp" ]
+}
+
+@test "install accepts an unowned maildev entry that already matches without claiming it" {
+  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+{
+  "mcpServers": {
+    "maildev": {
+      "type": "http",
+      "url": "https://myproj.ddev.site:1081/mcp"
+    }
+  }
+}
+JSON
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  [ ! -f "${DDEV_APPROOT}/.ddev/maildev/mcp-state.json" ]
+}
+
 @test "install fails without modifying a malformed .mcp.json" {
   printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
   local before
