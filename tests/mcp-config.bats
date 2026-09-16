@@ -416,6 +416,66 @@ JSON
   [[ "$output_seen" == *"Could not write"* ]]
 }
 
+@test "install refuses a hostname that hides another host in userinfo" {
+  export DDEV_HOSTNAME="myproject.ddev.site@attacker.example.com"
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Fatal error"* ]]
+
+  [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
+}
+
+@test "install refuses a hostname carrying a path" {
+  export DDEV_HOSTNAME="attacker.example.com/myproj.ddev.site"
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 1 ]
+
+  [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
+}
+
+@test "install refuses an empty hostname" {
+  export DDEV_HOSTNAME=""
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 1 ]
+
+  [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
+}
+
+@test "install accepts a project hostname with a custom TLD" {
+  export DDEV_HOSTNAME="myproj.example.test"
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run mcp_json "mcpServers.maildev.url"
+  [ "$output" = "https://myproj.example.test:1081/mcp" ]
+}
+
+@test "install uses the first of several hostnames" {
+  export DDEV_HOSTNAME="myproj.ddev.site,extra.ddev.site"
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run mcp_json "mcpServers.maildev.url"
+  [ "$output" = "https://myproj.ddev.site:1081/mcp" ]
+}
+
+@test "remove still works when the hostname is unusable" {
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  export DDEV_HOSTNAME=""
+
+  run php "${RUNNER}" "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+
+  [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
+}
+
 @test "install fails without modifying a malformed .mcp.json" {
   printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
   local before

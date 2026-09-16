@@ -3,18 +3,14 @@
 #ddev-generated
 
 $projectRoot = getenv('DDEV_APPROOT');
-$hostname = strtok(getenv('DDEV_HOSTNAME'), ',');
 
 $configurationFile = $projectRoot . '/.mcp.json';
 $stateFile = $projectRoot . '/.ddev/maildev/mcp-state.json';
 
-$entry = (object) [
-    'type' => 'http',
-    'url' => sprintf('https://%s:1081/mcp', $hostname),
-];
-
+// Only 'install' resolves the hostname, so a project whose hostname is unusable
+// can still be uninstalled.
 match ($argv[1] ?? 'install') {
-    'install' => install($configurationFile, $stateFile, $entry),
+    'install' => install($configurationFile, $stateFile, maildevEntry()),
     'remove' => remove($configurationFile, $stateFile),
     default => fail("Usage: setup-mcp.php [install|remove]\n"),
 };
@@ -94,6 +90,28 @@ function remove(string $configurationFile, string $stateFile): void
     unlink($stateFile);
 
     echo "Removed the 'maildev' MCP server entry.\n";
+}
+
+function maildevEntry(): object
+{
+    $rawHostname = (string) getenv('DDEV_HOSTNAME');
+    $hostname = strtok($rawHostname, ',');
+
+    // This URL tells Claude Code where to connect. Anything but a bare hostname
+    // can move the real target elsewhere while still reading like the project's
+    // own address, e.g. "myproject.ddev.site@attacker.example.com".
+    if ($hostname === false || !preg_match('/^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/', $hostname)) {
+        fail(sprintf(
+            "Error: DDEV_HOSTNAME is not a plain hostname: '%s'.\n"
+                . "Refusing to write an MCP server URL that could point elsewhere.\n",
+            $rawHostname
+        ));
+    }
+
+    return (object) [
+        'type' => 'http',
+        'url' => sprintf('https://%s:1081/mcp', $hostname),
+    ];
 }
 
 function holdsNothingElse(object $configuration): bool
