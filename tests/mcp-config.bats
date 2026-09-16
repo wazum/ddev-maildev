@@ -1,10 +1,7 @@
 #!/usr/bin/env bats
 #
-# Unit tests for maildev/scripts/setup-mcp.php.
-#
-# These exercise .mcp.json ownership logic only: no DDEV, no Docker, no
-# containers. The script reads DDEV_APPROOT and DDEV_HOSTNAME from the
-# environment, so a temp directory is a complete fixture.
+# No DDEV or Docker needed: the script reads DDEV_APPROOT and DDEV_HOSTNAME from
+# the environment, so a temp directory is a complete fixture.
 
 setup() {
   set -eu -o pipefail
@@ -19,7 +16,6 @@ setup() {
   mkdir -p "${DDEV_APPROOT}/.ddev"
 }
 
-# Reads a dotted path out of a JSON file so assertions stay readable.
 # Exits non-zero when any segment of the path is missing.
 json_at() {
   php -r '
@@ -338,6 +334,32 @@ JSON
     echo is_array($configuration->mcpServers->local->args) ? "array" : "object";
   '
   [ "$output" = "array" ]
+}
+
+@test "install reports an actionable error for a .mcp.json whose root is not an object" {
+  printf '["not", "an", "object"]' > "${DDEV_APPROOT}/.mcp.json"
+  local before
+  before="$(cat "${DDEV_APPROOT}/.mcp.json")"
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Fatal error"* ]]
+  [[ "$output" == *".mcp.json"* ]]
+
+  [ "$(cat "${DDEV_APPROOT}/.mcp.json")" = "${before}" ]
+}
+
+@test "install reports an actionable error for a .mcp.json whose mcpServers is not an object" {
+  printf '{"mcpServers": "nonsense"}' > "${DDEV_APPROOT}/.mcp.json"
+  local before
+  before="$(cat "${DDEV_APPROOT}/.mcp.json")"
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Fatal error"* ]]
+  [[ "$output" == *"mcpServers"* ]]
+
+  [ "$(cat "${DDEV_APPROOT}/.mcp.json")" = "${before}" ]
 }
 
 @test "install fails without modifying a malformed .mcp.json" {

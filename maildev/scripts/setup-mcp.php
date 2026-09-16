@@ -22,7 +22,7 @@ match ($argv[1] ?? 'install') {
 function install(string $configurationFile, string $stateFile, object $entry): void
 {
     $configurationExisted = file_exists($configurationFile);
-    $configuration = $configurationExisted ? readJsonOrFail($configurationFile) : new stdClass();
+    $configuration = $configurationExisted ? readConfigurationOrFail($configurationFile) : new stdClass();
     $state = file_exists($stateFile) ? readJsonOrFail($stateFile) : null;
 
     $existingEntry = $configuration->mcpServers->maildev ?? null;
@@ -69,7 +69,7 @@ function remove(string $configurationFile, string $stateFile): void
     $state = readJsonOrFail($stateFile);
 
     if (file_exists($configurationFile)) {
-        $configuration = readJsonOrFail($configurationFile);
+        $configuration = readConfigurationOrFail($configurationFile);
         $existingEntry = $configuration->mcpServers->maildev ?? null;
 
         if ($existingEntry !== null && $existingEntry != ($state->entry ?? null)) {
@@ -105,10 +105,10 @@ function holdsNothingElse(object $configuration): bool
     return $servers === [] && $otherProperties === [];
 }
 
-function readJsonOrFail(string $file): mixed
+function readJsonOrFail(string $file): object
 {
     try {
-        return json_decode(file_get_contents($file), false, 512, JSON_THROW_ON_ERROR);
+        $decoded = json_decode(file_get_contents($file), false, 512, JSON_THROW_ON_ERROR);
     } catch (JsonException $exception) {
         fail(sprintf(
             "Error: %s is not valid JSON (%s).\nLeaving it unchanged; fix it and try again.\n",
@@ -116,6 +116,33 @@ function readJsonOrFail(string $file): mixed
             $exception->getMessage()
         ));
     }
+
+    if (!$decoded instanceof stdClass) {
+        fail(sprintf(
+            "Error: %s must contain a JSON object at its top level, found %s.\n"
+                . "Leaving it unchanged; fix it and try again.\n",
+            $file,
+            get_debug_type($decoded)
+        ));
+    }
+
+    return $decoded;
+}
+
+function readConfigurationOrFail(string $file): object
+{
+    $configuration = readJsonOrFail($file);
+
+    if (isset($configuration->mcpServers) && !$configuration->mcpServers instanceof stdClass) {
+        fail(sprintf(
+            "Error: the 'mcpServers' value in %s must be a JSON object, found %s.\n"
+                . "Leaving it unchanged; fix it and try again.\n",
+            $file,
+            get_debug_type($configuration->mcpServers)
+        ));
+    }
+
+    return $configuration;
 }
 
 function writeJson(string $file, object $data): void
