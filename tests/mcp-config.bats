@@ -138,6 +138,52 @@ JSON
   [ ! -f "${DDEV_APPROOT}/.ddev/maildev/mcp-state.json" ]
 }
 
+@test "reinstall leaves an untouched owned entry as it is" {
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run mcp_json "mcpServers.maildev.url"
+  [ "$output" = "https://myproj.ddev.site:1081/mcp" ]
+}
+
+@test "reinstall updates an owned entry after the project hostname changes" {
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  export DDEV_HOSTNAME="renamed.ddev.site"
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run mcp_json "mcpServers.maildev.url"
+  [ "$output" = "https://renamed.ddev.site:1081/mcp" ]
+}
+
+@test "reinstall fails when the owned entry was edited by hand" {
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+{
+  "mcpServers": {
+    "maildev": {
+      "type": "http",
+      "url": "https://edited-by-hand.example/mcp"
+    }
+  }
+}
+JSON
+
+  run php "${SCRIPT}" install
+  [ "$status" -ne 0 ]
+
+  run mcp_json "mcpServers.maildev.url"
+  [ "$output" = "https://edited-by-hand.example/mcp" ]
+}
+
 @test "install fails without modifying a malformed .mcp.json" {
   printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
   local before

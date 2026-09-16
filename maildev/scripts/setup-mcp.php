@@ -32,6 +32,14 @@ if ($existingEntry !== null && $state === null) {
     ));
 }
 
+if ($existingEntry !== null && $existingEntry != ($state['entry'] ?? null)) {
+    fail(sprintf(
+        "The 'maildev' MCP server in %s was changed since this add-on wrote it.\n"
+            . "Your version has been left unchanged. Delete the entry to let the add-on manage it again.\n",
+        $configurationFile
+    ));
+}
+
 $configuration['mcpServers']['maildev'] = $entry;
 
 writeJson($configurationFile, $configuration);
