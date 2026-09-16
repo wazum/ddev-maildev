@@ -184,6 +184,74 @@ JSON
   [ "$output" = "https://edited-by-hand.example/mcp" ]
 }
 
+@test "remove deletes an owned entry from a file it did not create" {
+  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://context7.example/mcp"
+    }
+  }
+}
+JSON
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+
+  run mcp_json "mcpServers.maildev"
+  [ "$status" -ne 0 ]
+}
+
+@test "remove keeps unrelated servers intact" {
+  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://context7.example/mcp"
+    }
+  }
+}
+JSON
+
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+
+  run mcp_json "mcpServers.context7.url"
+  [ "$status" -eq 0 ]
+  [ "$output" = "https://context7.example/mcp" ]
+}
+
+@test "remove preserves a maildev entry that was edited after install" {
+  run php "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+{
+  "mcpServers": {
+    "maildev": {
+      "type": "http",
+      "url": "https://edited-by-hand.example/mcp"
+    }
+  }
+}
+JSON
+
+  run php "${SCRIPT}" remove
+  [[ "$output" == *"maildev"* ]]
+
+  run mcp_json "mcpServers.maildev.url"
+  [ "$status" -eq 0 ]
+  [ "$output" = "https://edited-by-hand.example/mcp" ]
+}
+
 @test "install fails without modifying a malformed .mcp.json" {
   printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
   local before
