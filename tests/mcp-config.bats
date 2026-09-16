@@ -507,6 +507,52 @@ JSON
   assert_contains "$output" "otherTopLevel"
 }
 
+@test "install writes nothing when the ownership state cannot be recorded" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores directory permissions"
+
+  chmod 500 "${DDEV_APPROOT}/.ddev"
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  local status_seen="$status"
+
+  chmod 700 "${DDEV_APPROOT}/.ddev"
+
+  [ "$status_seen" -eq 1 ]
+  [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
+}
+
+@test "install recovers on a retry after the config write failed" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores directory permissions"
+
+  chmod 500 "${DDEV_APPROOT}"
+  run php "${RUNNER}" "${SCRIPT}" install
+  local status_seen="$status"
+  chmod 700 "${DDEV_APPROOT}"
+
+  [ "$status_seen" -eq 1 ]
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run mcp_json "mcpServers.maildev.url"
+  [ "$output" = "https://myproj.ddev.site:1081/mcp" ]
+}
+
+@test "remove cleans up state left behind by a failed config write" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores directory permissions"
+
+  chmod 500 "${DDEV_APPROOT}"
+  run php "${RUNNER}" "${SCRIPT}" install
+  chmod 700 "${DDEV_APPROOT}"
+
+  [ -f "${DDEV_APPROOT}/.ddev/maildev/mcp-state.json" ]
+
+  run php "${RUNNER}" "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+
+  [ ! -f "${DDEV_APPROOT}/.ddev/maildev/mcp-state.json" ]
+}
+
 @test "install fails without modifying a malformed .mcp.json" {
   printf '{ "mcpServers": { oops' > "${DDEV_APPROOT}/.mcp.json"
   local before

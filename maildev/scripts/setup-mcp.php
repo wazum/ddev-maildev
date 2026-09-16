@@ -48,8 +48,11 @@ function install(string $configurationFile, string $stateFile, object $entry): v
     $configuration->mcpServers ??= new stdClass();
     $configuration->mcpServers->maildev = $entry;
 
-    writeJson($configurationFile, $configuration);
+    // State first: a failure here leaves the user's config untouched. The other
+    // order would put an entry in .mcp.json that nothing records as ours, which
+    // neither remove nor a reinstall would ever clean up.
     writeJson($stateFile, (object) ['entry' => $entry, 'created_file' => !$configurationExisted]);
+    writeJson($configurationFile, $configuration);
 
     printf("Configured the 'maildev' MCP server at %s\n", $entry->url);
 }
