@@ -13,6 +13,8 @@ setup() {
 
   export DDEV_APPROOT="${BATS_TEST_TMPDIR}/project"
   export DDEV_HOSTNAME="myproj.ddev.site"
+  export MAILDEV_WEB_USER="ddev"
+  export MAILDEV_WEB_PASS="s3cret-pass"
 
   mkdir -p "${DDEV_APPROOT}/.ddev"
 }
@@ -134,12 +136,15 @@ JSON
 }
 
 @test "install accepts an unowned maildev entry that already matches without claiming it" {
-  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+  cat > "${DDEV_APPROOT}/.mcp.json" <<JSON
 {
   "mcpServers": {
     "maildev": {
       "type": "http",
-      "url": "https://myproj.ddev.site:1081/mcp"
+      "url": "https://myproj.ddev.site:1081/mcp",
+      "headers": {
+        "Authorization": "Basic $(printf 'ddev:s3cret-pass' | base64)"
+      }
     }
   }
 }
@@ -581,6 +586,31 @@ JSON
   [ -L "${DDEV_APPROOT}/.mcp.json" ]
   run cat "${DDEV_APPROOT}/elsewhere.json"
   refute_contains "$output" "maildev"
+}
+
+@test "install authorises the MCP entry with the MailDev credentials" {
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run mcp_json "mcpServers.maildev.headers.Authorization"
+  [ "$status" -eq 0 ]
+  [ "$output" = "Basic $(printf 'ddev:s3cret-pass' | base64)" ]
+}
+
+@test "install refuses to write an unauthenticated MCP entry" {
+  unset MAILDEV_WEB_PASS
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 1 ]
+
+  [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
+}
+
+@test "install never prints the MailDev password" {
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  refute_contains "$output" "s3cret-pass"
 }
 
 @test "install fails without modifying a malformed .mcp.json" {

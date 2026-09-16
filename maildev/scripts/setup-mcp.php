@@ -134,9 +134,24 @@ function maildevEntry(): object
         ));
     }
 
+    $userName = (string) getenv('MAILDEV_WEB_USER');
+    $password = (string) getenv('MAILDEV_WEB_PASS');
+
+    // MailDev has no authentication unless both are set.
+    if ($userName === '' || $password === '') {
+        fail(
+            "Error: MAILDEV_WEB_USER and MAILDEV_WEB_PASS are not set.\n"
+                . "The add-on will not configure an unauthenticated MailDev inbox.\n"
+                . "Check that .ddev/.env.maildev exists and holds both values.\n"
+        );
+    }
+
     return (object) [
         'type' => 'http',
         'url' => sprintf('https://%s:1081/mcp', $hostname),
+        'headers' => (object) [
+            'Authorization' => 'Basic ' . base64_encode($userName . ':' . $password),
+        ],
     ];
 }
 
