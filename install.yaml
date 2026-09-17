@@ -29,8 +29,9 @@ post_install_actions:
 
   - |
     #ddev-description: Send PHP mail to the MailDev container
-    mkdir -p .ddev/php
-    cat > .ddev/php/maildev.ini <<EOF
+    # Bash actions run in .ddev, ddev dotenv resolves against the project root.
+    mkdir -p "${DDEV_APPROOT}/.ddev/php"
+    cat > "${DDEV_APPROOT}/.ddev/php/maildev.ini" <<EOF
     ; #ddev-generated
     ; Container name, not the service name: every project shares ddev_default,
     ; where a plain "maildev" is ambiguous.
@@ -71,15 +72,15 @@ removal_actions:
 
   - |
     #ddev-description: Remove the generated PHP and environment files
-    if [ -f .ddev/php/maildev.ini ]; then
-      if grep -q '#ddev-generated' .ddev/php/maildev.ini; then
-        rm -f .ddev/php/maildev.ini
+    if [ -f "${DDEV_APPROOT}/.ddev/php/maildev.ini" ]; then
+      if grep -q '#ddev-generated' "${DDEV_APPROOT}/.ddev/php/maildev.ini"; then
+        rm -f "${DDEV_APPROOT}/.ddev/php/maildev.ini"
       else
         echo "Skipping .ddev/php/maildev.ini: it has been modified."
       fi
     fi
-    rm -f .ddev/.env.web.maildev
-    if [ -f .ddev/.env.maildev.local ]; then
+    rm -f "${DDEV_APPROOT}/.ddev/.env.web.maildev"
+    if [ -f "${DDEV_APPROOT}/.ddev/.env.maildev.local" ]; then
       echo "Left .ddev/.env.maildev.local in place; it may hold your own settings."
     fi
 
