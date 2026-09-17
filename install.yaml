@@ -30,8 +30,15 @@ post_install_actions:
   - |
     #ddev-description: Send PHP mail to the MailDev container
     # Bash actions run in .ddev, ddev dotenv resolves against the project root.
+    php_ini="${DDEV_APPROOT}/.ddev/php/maildev.ini"
+    # A missing #ddev-generated marker means the user has taken the file over.
+    if [ -f "${php_ini}" ] && ! grep -q '#ddev-generated' "${php_ini}"; then
+      echo "Skipping .ddev/php/maildev.ini: it has been modified."
+      echo "Point sendmail_path at ddev-${DDEV_SITENAME}-maildev:1025 yourself."
+      exit 0
+    fi
     mkdir -p "${DDEV_APPROOT}/.ddev/php"
-    cat > "${DDEV_APPROOT}/.ddev/php/maildev.ini" <<EOF
+    cat > "${php_ini}" <<EOF
     ; #ddev-generated
     ; Container name, not the service name: every project shares ddev_default,
     ; where a plain "maildev" is ambiguous.
