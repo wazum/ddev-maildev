@@ -5,28 +5,28 @@
 $projectRoot = getenv('DDEV_APPROOT');
 
 $configurationFile = $projectRoot . '/.mcp.json';
-$stateFile = $projectRoot . '/.ddev/maildev/mcp-state.json';
+$ownershipFile = $projectRoot . '/.ddev/maildev/mcp-state.json';
 
-// Only 'install' resolves the hostname, so a project whose hostname is unusable
-// can still be uninstalled.
 match ($argv[1] ?? 'install') {
-    'install' => install($configurationFile, $stateFile, maildevEntry()),
-    'remove' => remove($configurationFile, $stateFile),
+    'install' => installMaildevServer($configurationFile, $ownershipFile),
+    'remove' => removeMaildevServer($configurationFile, $ownershipFile),
     default => fail("Usage: setup-mcp.php [install|remove]\n"),
 };
 
-function install(string $configurationFile, string $stateFile, object $entry): void
+function installMaildevServer(string $configurationFile, string $ownershipFile): void
 {
+    $serverEntry = buildMaildevServerEntry();
+
     failOnSymlinkedConfiguration($configurationFile);
 
-    $configurationExisted = file_exists($configurationFile);
-    $configuration = $configurationExisted ? readConfigurationOrFail($configurationFile) : new stdClass();
-    $state = file_exists($stateFile) ? readJsonOrFail($stateFile) : null;
+    $configurationFileExists = file_exists($configurationFile);
+    $configuration = $configurationFileExists ? readMcpConfiguration($configurationFile) : new stdClass();
+    $ownership = file_exists($ownershipFile) ? readJsonObject($ownershipFile) : null;
 
     $existingEntry = $configuration->mcpServers->maildev ?? null;
 
-    if ($existingEntry !== null && $state === null) {
-        if ($existingEntry == $entry) {
+    if ($existingEntry !== null && $ownership === null) {
+        if ($existingEntry == $serverEntry) {
             echo "An identical 'maildev' MCP server is already configured; leaving it alone.\n";
 
             return;
@@ -39,7 +39,7 @@ function install(string $configurationFile, string $stateFile, object $entry): v
         ));
     }
 
-    if ($existingEntry !== null && $existingEntry != ($state->entry ?? null)) {
+    if ($existingEntry !== null && $existingEntry != ($ownership->entry ?? null)) {
         fail(sprintf(
             "The 'maildev' MCP server in %s was changed since this add-on wrote it.\n"
                 . "Your version has been left unchanged. Delete the entry to let the add-on manage it again.\n",
@@ -48,36 +48,37 @@ function install(string $configurationFile, string $stateFile, object $entry): v
     }
 
     $configuration->mcpServers ??= new stdClass();
-    $configuration->mcpServers->maildev = $entry;
+    $configuration->mcpServers->maildev = $serverEntry;
 
-    // State first: a failure here leaves the user's config untouched. The other
-    // order would put an entry in .mcp.json that nothing records as ours, which
-    // neither remove nor a reinstall would ever clean up.
-    writeJson($stateFile, (object) ['entry' => $entry, 'created_file' => !$configurationExisted]);
-    writeJson($configurationFile, $configuration);
+    // Ownership must be recorded first to avoid untracked entries on failure.
+    writeJsonAtomically($ownershipFile, (object) [
+        'entry' => $serverEntry,
+        'created_file' => !$configurationFileExists,
+    ]);
+    writeJsonAtomically($configurationFile, $configuration);
 
-    printf("Configured the 'maildev' MCP server at %s\n", $entry->url);
+    printf("Configured the 'maildev' MCP server at %s\n", $serverEntry->url);
 }
 
-function remove(string $configurationFile, string $stateFile): void
+function removeMaildevServer(string $configurationFile, string $ownershipFile): void
 {
     failOnSymlinkedConfiguration($configurationFile);
 
-    if (!file_exists($stateFile)) {
+    if (!file_exists($ownershipFile)) {
         echo "No add-on owned MCP entry was recorded; leaving .mcp.json alone.\n";
 
         return;
     }
 
-    $state = readJsonOrFail($stateFile);
+    $ownership = readJsonObject($ownershipFile);
     $existingEntry = null;
 
     if (file_exists($configurationFile)) {
-        $configuration = readConfigurationOrFail($configurationFile);
+        $configuration = readMcpConfiguration($configurationFile);
         $existingEntry = $configuration->mcpServers->maildev ?? null;
     }
 
-    if ($existingEntry !== null && $existingEntry != ($state->entry ?? null)) {
+    if ($existingEntry !== null && $existingEntry != ($ownership->entry ?? null)) {
         printf(
             "The 'maildev' MCP server in %s was changed since this add-on wrote it.\n"
                 . "It has been left in place; delete the entry by hand if you no longer want it.\n",
@@ -87,19 +88,17 @@ function remove(string $configurationFile, string $stateFile): void
         return;
     }
 
-    // Someone else already took the entry out. Touching the file now would only
-    // add an empty 'mcpServers' back to a config the add-on no longer owns.
     if ($existingEntry !== null) {
         unset($configuration->mcpServers->maildev);
 
-        if (($state->created_file ?? false) && holdsNothingElse($configuration)) {
+        if (($ownership->created_file ?? false) && isMcpConfigurationEmpty($configuration)) {
             unlink($configurationFile);
         } else {
-            writeJson($configurationFile, $configuration);
+            writeJsonAtomically($configurationFile, $configuration);
         }
     }
 
-    unlink($stateFile);
+    unlink($ownershipFile);
 
     echo "Removed the 'maildev' MCP server entry.\n";
 }
@@ -118,22 +117,39 @@ function failOnSymlinkedConfiguration(string $configurationFile): void
     ));
 }
 
-function maildevEntry(): object
+function buildMaildevServerEntry(): object
 {
-    $rawHostname = (string) getenv('DDEV_HOSTNAME');
-    $hostname = strtok($rawHostname, ',');
+    $hostname = readProjectHostname();
+    $authorizationHeader = readMaildevAuthorizationHeader();
 
-    // This URL tells Claude Code where to connect. Anything but a bare hostname
-    // can move the real target elsewhere while still reading like the project's
-    // own address, e.g. "myproject.ddev.site@attacker.example.com".
-    if ($hostname === false || !preg_match('/^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/', $hostname)) {
+    return (object) [
+        'type' => 'http',
+        'url' => sprintf('https://%s:1081/mcp', $hostname),
+        'headers' => (object) [
+            'Authorization' => $authorizationHeader,
+        ],
+    ];
+}
+
+function readProjectHostname(): string
+{
+    $configuredHostnames = (string) getenv('DDEV_HOSTNAME');
+    $primaryHostname = strtok($configuredHostnames, ',');
+    $hostnamePattern = '/^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/';
+
+    if ($primaryHostname === false || !preg_match($hostnamePattern, $primaryHostname)) {
         fail(sprintf(
             "Error: DDEV_HOSTNAME is not a plain hostname: '%s'.\n"
                 . "Refusing to write an MCP server URL that could point elsewhere.\n",
-            $rawHostname
+            $configuredHostnames
         ));
     }
 
+    return $primaryHostname;
+}
+
+function readMaildevAuthorizationHeader(): string
+{
     $userName = (string) getenv('MAILDEV_WEB_USER');
     $password = (string) getenv('MAILDEV_WEB_PASS');
 
@@ -146,25 +162,35 @@ function maildevEntry(): object
         );
     }
 
-    return (object) [
-        'type' => 'http',
-        'url' => sprintf('https://%s:1081/mcp', $hostname),
-        'headers' => (object) [
-            'Authorization' => 'Basic ' . base64_encode($userName . ':' . $password),
-        ],
-    ];
+    return 'Basic ' . base64_encode($userName . ':' . $password);
 }
 
-function holdsNothingElse(object $configuration): bool
+function readMcpConfiguration(string $file): object
 {
-    $servers = (array) ($configuration->mcpServers ?? new stdClass());
+    $configuration = readJsonObject($file);
+
+    if (isset($configuration->mcpServers) && !$configuration->mcpServers instanceof stdClass) {
+        fail(sprintf(
+            "Error: the 'mcpServers' value in %s must be a JSON object, found %s.\n"
+                . "Leaving it unchanged; fix it and try again.\n",
+            $file,
+            get_debug_type($configuration->mcpServers)
+        ));
+    }
+
+    return $configuration;
+}
+
+function isMcpConfigurationEmpty(object $configuration): bool
+{
+    $remainingServers = (array) ($configuration->mcpServers ?? new stdClass());
     $otherProperties = (array) $configuration;
     unset($otherProperties['mcpServers']);
 
-    return $servers === [] && $otherProperties === [];
+    return $remainingServers === [] && $otherProperties === [];
 }
 
-function readJsonOrFail(string $file): object
+function readJsonObject(string $file): object
 {
     try {
         $contents = file_get_contents($file);
@@ -198,26 +224,8 @@ function readJsonOrFail(string $file): object
     return $decoded;
 }
 
-function readConfigurationOrFail(string $file): object
-{
-    $configuration = readJsonOrFail($file);
-
-    if (isset($configuration->mcpServers) && !$configuration->mcpServers instanceof stdClass) {
-        fail(sprintf(
-            "Error: the 'mcpServers' value in %s must be a JSON object, found %s.\n"
-                . "Leaving it unchanged; fix it and try again.\n",
-            $file,
-            get_debug_type($configuration->mcpServers)
-        ));
-    }
-
-    return $configuration;
-}
-
-// DDEV runs add-on actions behind an error handler that ignores
-// error_reporting(), so `@` suppresses nothing and warnings arrive as
-// ErrorException.
-function writeJson(string $file, object $data): void
+// DDEV throws ErrorException for filesystem warnings despite @.
+function writeJsonAtomically(string $file, object $data): void
 {
     $directory = dirname($file);
     $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
@@ -231,8 +239,7 @@ function writeJson(string $file, object $data): void
 
         $permissions = file_exists($file) ? fileperms($file) & 0o777 : 0o600;
 
-        // 'x' fails instead of falling back elsewhere, keeping the replacement
-        // a real atomic rename inside $directory.
+        // Atomic rename requires the same filesystem.
         $fileHandle = fopen($temporaryFile, 'xb');
 
         if ($fileHandle === false) {
