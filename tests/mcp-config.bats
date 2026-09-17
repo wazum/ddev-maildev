@@ -1,7 +1,6 @@
 #!/usr/bin/env bats
 #
-# No DDEV or Docker needed: the script reads DDEV_APPROOT and DDEV_HOSTNAME from
-# the environment, so a temp directory is a complete fixture.
+# Environment overrides let these tests run without DDEV or Docker.
 
 setup() {
   set -eu -o pipefail
@@ -19,8 +18,7 @@ setup() {
   mkdir -p "${DDEV_APPROOT}/.ddev"
 }
 
-# A false `[[ ]]` does not fail a bats test, because `[[` is a shell keyword and
-# errexit skips it. These are functions so a failed assertion stops the test.
+# Assertion functions stop Bats tests on failure; bare [[ ]] does not.
 assert_contains() {
   case "$1" in
     *"$2"*) return 0 ;;
@@ -35,7 +33,6 @@ refute_contains() {
   esac
 }
 
-# Exits non-zero when any segment of the path is missing.
 json_at() {
   php -r '
     $configuration = json_decode(file_get_contents($argv[1]), true);
@@ -292,13 +289,24 @@ JSON
   [ -f "${DDEV_APPROOT}/.mcp.json" ]
 }
 
+@test "remove deletes .mcp.json it created even after a reinstall" {
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php "${RUNNER}" "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+
+  [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
+}
+
 @test "remove keeps a created .mcp.json that gained an unrelated server" {
   run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
-  # The maildev entry has to match what install recorded, headers included, or
-  # remove takes the "changed since we wrote it" path and this never exercises
-  # removal at all.
+  # Missing headers would make removal treat this as a user-edited entry.
   cat > "${DDEV_APPROOT}/.mcp.json" <<JSON
 {
   "mcpServers": {

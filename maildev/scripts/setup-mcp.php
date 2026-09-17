@@ -51,9 +51,10 @@ function installMaildevServer(string $configurationFile, string $ownershipFile):
     $configuration->mcpServers->maildev = $serverEntry;
 
     // Ownership must be recorded first to avoid untracked entries on failure.
+    // File existence on reinstall does not reveal who originally created it.
     writeJsonAtomically($ownershipFile, (object) [
         'entry' => $serverEntry,
-        'created_file' => !$configurationFileExists,
+        'created_file' => $ownership->created_file ?? !$configurationFileExists,
     ]);
     writeJsonAtomically($configurationFile, $configuration);
 
