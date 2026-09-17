@@ -445,7 +445,7 @@ JSON
   [ "$(cat "${DDEV_APPROOT}/.mcp.json")" = "${before}" ]
 }
 
-@test "install preserves the permissions of an existing .mcp.json" {
+@test "install keeps the permissions you chose for an existing .mcp.json" {
   echo '{"mcpServers":{}}' > "${DDEV_APPROOT}/.mcp.json"
   chmod 640 "${DDEV_APPROOT}/.mcp.json"
 
@@ -461,6 +461,14 @@ JSON
   [ "$status" -eq 0 ]
 
   run php -r 'printf("%o", fileperms(getenv("DDEV_APPROOT") . "/.mcp.json") & 0777);'
+  [ "$output" = "600" ]
+}
+
+@test "install writes the ownership state readable only by its owner" {
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run php -r 'printf("%o", fileperms(getenv("DDEV_APPROOT") . "/.ddev/maildev/mcp-state.json") & 0777);'
   [ "$output" = "600" ]
 }
 
@@ -634,6 +642,26 @@ JSON
 
   run cat "${DDEV_APPROOT}/elsewhere.json"
   assert_contains "$output" "maildev"
+}
+
+@test "install reports an actionable error when the maildev entry is not an object" {
+  echo '{"mcpServers":{"maildev":"disabled"}}' > "${DDEV_APPROOT}/.mcp.json"
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 1 ]
+  refute_contains "$output" "Fatal error"
+  assert_contains "$output" "maildev"
+}
+
+@test "remove reports an actionable error when the maildev entry is not an object" {
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  echo '{"mcpServers":{"maildev":"disabled"}}' > "${DDEV_APPROOT}/.mcp.json"
+
+  run php "${RUNNER}" "${SCRIPT}" remove
+  [ "$status" -eq 1 ]
+  refute_contains "$output" "Fatal error"
 }
 
 @test "install refuses a symlinked .mcp.json" {

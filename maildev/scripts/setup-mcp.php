@@ -61,6 +61,36 @@ function installMaildevServer(string $configurationFile, string $ownershipFile):
     writeJsonAtomically($configurationFile, $configuration);
 
     printf("Configured the 'maildev' MCP server at %s\n", $serverEntry->url);
+
+    warnIfConfigurationIsTracked($configurationFile);
+}
+
+// The entry holds the inbox password, and .mcp.json is the MCP file people commit.
+function warnIfConfigurationIsTracked(string $configurationFile): void
+{
+    // Without exec() this warning is not worth a fatal; a project can disable it
+    // through .ddev/php, and git may not be installed either.
+    if (!function_exists('exec')) {
+        return;
+    }
+
+    $command = sprintf(
+        'git -C %s ls-files --error-unmatch %s 2>/dev/null',
+        escapeshellarg(dirname($configurationFile)),
+        escapeshellarg($configurationFile)
+    );
+
+    exec($command, $output, $exitCode);
+
+    if ($exitCode !== 0) {
+        return;
+    }
+
+    printf(
+        "\nWarning: %s is tracked by Git and now holds the MailDev password.\n"
+            . "Untrack it, or move the 'maildev' entry to your own MCP config.\n",
+        $configurationFile
+    );
 }
 
 function removeMaildevServer(string $configurationFile, string $ownershipFile): void
@@ -191,6 +221,15 @@ function readMcpConfiguration(string $file): object
         ));
     }
 
+    if (isset($configuration->mcpServers->maildev) && !$configuration->mcpServers->maildev instanceof stdClass) {
+        fail(sprintf(
+            "Error: the 'maildev' server in %s must be a JSON object, found %s.\n"
+                . "Leaving it unchanged; remove the entry to let the add-on manage it again.\n",
+            $file,
+            get_debug_type($configuration->mcpServers->maildev)
+        ));
+    }
+
     return $configuration;
 }
 
@@ -250,8 +289,6 @@ function writeJsonAtomically(string $file, object $data): void
             mkdir($directory, 0o755, true);
         }
 
-        $permissions = file_exists($file) ? fileperms($file) & 0o777 : 0o600;
-
         // Atomic rename requires the same filesystem.
         $fileHandle = fopen($temporaryFile, 'xb');
 
@@ -261,12 +298,15 @@ function writeJsonAtomically(string $file, object $data): void
 
         $temporaryFileCreated = true;
 
+        // Narrowed before the credential is written, never after. A file the user
+        // already had keeps the permissions they chose; one we create is ours.
+        chmod($temporaryFile, file_exists($file) ? fileperms($file) & 0o777 : 0o600);
+
         if (fwrite($fileHandle, $json) !== strlen($json)) {
             throw new RuntimeException('the temporary file could not be written in full');
         }
 
         fclose($fileHandle);
-        chmod($temporaryFile, $permissions);
         rename($temporaryFile, $file);
     } catch (Throwable $exception) {
         if ($temporaryFileCreated && file_exists($temporaryFile)) {
