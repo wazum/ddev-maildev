@@ -289,6 +289,49 @@ JSON
   [ -f "${DDEV_APPROOT}/.mcp.json" ]
 }
 
+@test "install recovers when the config write failed during a hostname change" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores directory permissions"
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  export DDEV_HOSTNAME="renamed.ddev.site"
+
+  # Ownership lives under .ddev and stays writable, so it records the new entry
+  # while .mcp.json keeps the old one.
+  chmod 500 "${DDEV_APPROOT}"
+  run php "${RUNNER}" "${SCRIPT}" install
+  local failed_status="$status"
+  chmod 700 "${DDEV_APPROOT}"
+
+  [ "$failed_status" -eq 1 ]
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  run mcp_json "mcpServers.maildev.url"
+  [ "$output" = "https://renamed.ddev.site:1081/mcp" ]
+}
+
+@test "remove cleans up when the config write failed during a hostname change" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores directory permissions"
+
+  run php "${RUNNER}" "${SCRIPT}" install
+  [ "$status" -eq 0 ]
+
+  export DDEV_HOSTNAME="renamed.ddev.site"
+
+  chmod 500 "${DDEV_APPROOT}"
+  run php "${RUNNER}" "${SCRIPT}" install
+  chmod 700 "${DDEV_APPROOT}"
+
+  run php "${RUNNER}" "${SCRIPT}" remove
+  [ "$status" -eq 0 ]
+
+  [ ! -f "${DDEV_APPROOT}/.mcp.json" ]
+  [ ! -f "${DDEV_APPROOT}/.ddev/maildev/mcp-state.json" ]
+}
+
 @test "remove deletes .mcp.json it created even after a reinstall" {
   run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]

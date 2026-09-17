@@ -39,7 +39,7 @@ function installMaildevServer(string $configurationFile, string $ownershipFile):
         ));
     }
 
-    if ($existingEntry !== null && $existingEntry != ($ownership->entry ?? null)) {
+    if ($existingEntry !== null && !isEntryOwned($existingEntry, $ownership)) {
         fail(sprintf(
             "The 'maildev' MCP server in %s was changed since this add-on wrote it.\n"
                 . "Your version has been left unchanged. Delete the entry to let the add-on manage it again.\n",
@@ -54,6 +54,8 @@ function installMaildevServer(string $configurationFile, string $ownershipFile):
     // File existence on reinstall does not reveal who originally created it.
     writeJsonAtomically($ownershipFile, (object) [
         'entry' => $serverEntry,
+        // Keeps the entry a failed write leaves behind recognisable as ours.
+        'previous_entry' => $existingEntry,
         'created_file' => $ownership->created_file ?? !$configurationFileExists,
     ]);
     writeJsonAtomically($configurationFile, $configuration);
@@ -79,7 +81,7 @@ function removeMaildevServer(string $configurationFile, string $ownershipFile): 
         $existingEntry = $configuration->mcpServers->maildev ?? null;
     }
 
-    if ($existingEntry !== null && $existingEntry != ($ownership->entry ?? null)) {
+    if ($existingEntry !== null && !isEntryOwned($existingEntry, $ownership)) {
         printf(
             "The 'maildev' MCP server in %s was changed since this add-on wrote it.\n"
                 . "It has been left in place; delete the entry by hand if you no longer want it.\n",
@@ -116,6 +118,16 @@ function failOnSymlinkedConfiguration(string $configurationFile): void
         "Error: %s is a symlink.\nPoint it at a real file, or retry with the link removed.\n",
         $configurationFile
     ));
+}
+
+function isEntryOwned(object $existingEntry, ?object $ownership): bool
+{
+    if ($ownership === null) {
+        return false;
+    }
+
+    return $existingEntry == ($ownership->entry ?? null)
+        || $existingEntry == ($ownership->previous_entry ?? null);
 }
 
 function buildMaildevServerEntry(): object
