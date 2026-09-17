@@ -8,7 +8,7 @@
   <a href="https://github.com/wazum/ddev-maildev/releases/latest"><img src="https://img.shields.io/github/v/release/wazum/ddev-maildev?style=for-the-badge&labelColor=24273a&color=ffdac1" alt="release"></a>
   <a href="https://github.com/wazum/ddev-maildev/commits"><img src="https://img.shields.io/github/last-commit/wazum/ddev-maildev?style=for-the-badge&labelColor=24273a&color=e2f0cb" alt="last commit"></a>
   <br>
-  <a href="https://ddev.com"><img src="https://img.shields.io/badge/DDEV-v1.25.4%2B-b5ead7?style=for-the-badge&logo=ddev&logoColor=white&labelColor=24273a" alt="DDEV v1.25.4 or newer"></a>
+  <a href="https://ddev.com"><img src="https://img.shields.io/badge/DDEV-v1.25.4%2B-b5ead7?style=for-the-badge&labelColor=24273a&logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyIDIgMiA3djEwbDEwIDUgMTAtNVY3em0wIDIuMyA3LjUgMy43TDEyIDExLjcgNC41IDh6TTQgOS42bDcgMy41djdMNCAxNi42em05IDEwLjV2LTdsNy0zLjV2N3oiLz48L3N2Zz4%3D" alt="DDEV v1.25.4 or newer"></a>
   <a href="https://github.com/maildev/maildev"><img src="https://img.shields.io/badge/MailDev-3.0.0--rc.3-ffb997?style=for-the-badge&labelColor=24273a" alt="MailDev 3.0.0-rc.3"></a>
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-enabled-c3b1e1?style=for-the-badge&logo=modelcontextprotocol&logoColor=white&labelColor=24273a" alt="MCP enabled"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-Apache--2.0-ffc6d9?style=for-the-badge&logo=apache&logoColor=white&labelColor=24273a" alt="Apache-2.0 licence"></a>
