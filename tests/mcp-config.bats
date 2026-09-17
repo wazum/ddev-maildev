@@ -296,12 +296,18 @@ JSON
   run php "${RUNNER}" "${SCRIPT}" install
   [ "$status" -eq 0 ]
 
-  cat > "${DDEV_APPROOT}/.mcp.json" <<'JSON'
+  # The maildev entry has to match what install recorded, headers included, or
+  # remove takes the "changed since we wrote it" path and this never exercises
+  # removal at all.
+  cat > "${DDEV_APPROOT}/.mcp.json" <<JSON
 {
   "mcpServers": {
     "maildev": {
       "type": "http",
-      "url": "https://myproj.ddev.site:1081/mcp"
+      "url": "https://myproj.ddev.site:1081/mcp",
+      "headers": {
+        "Authorization": "Basic $(printf 'ddev:s3cret-pass' | base64)"
+      }
     },
     "context7": {
       "type": "http",
@@ -315,6 +321,10 @@ JSON
   [ "$status" -eq 0 ]
 
   [ -f "${DDEV_APPROOT}/.mcp.json" ]
+
+  run mcp_json "mcpServers.maildev"
+  [ "$status" -ne 0 ]
+
   run mcp_json "mcpServers.context7.url"
   [ "$output" = "https://context7.example/mcp" ]
 }
