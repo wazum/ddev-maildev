@@ -1,0 +1,101 @@
+name: maildev
+
+# .env.web.maildev and .env.maildev.local need labelled env-file support.
+ddev_version_constraint: '>= v1.25.4'
+
+project_files:
+  - docker-compose.maildev.yaml
+  - commands/host/maildev
+  - maildev/.gitignore
+  - maildev/scripts/setup-mcp.php
+
+post_install_actions:
+  - |
+    #ddev-description: Generate the MailDev web credentials
+    # The .local suffix is what DDEV's own .ddev/.gitignore covers, so the
+    # password cannot be committed. DDEV still loads the file for this service.
+    if [ -z "$(ddev dotenv get .ddev/.env.maildev.local --maildev-web-pass 2>/dev/null)" ]; then
+      # Assigned first on purpose: errexit only fires on a failed substitution
+      # when it stands alone, so inlining this would write an empty password.
+      password="$(openssl rand -hex 16)"
+      ddev dotenv set .ddev/.env.maildev.local \
+        --maildev-web-user=ddev \
+        --maildev-web-pass="${password}"
+      chmod 600 "${DDEV_APPROOT}/.ddev/.env.maildev.local"
+      echo "Generated a MailDev web password in .ddev/.env.maildev.local"
+    else
+      echo "Using the MAILDEV_WEB_PASS already in .ddev/.env.maildev.local"
+    fi
+
+  - |
+    #ddev-description: Send PHP mail to the MailDev container
+    mkdir -p .ddev/php
+    cat > .ddev/php/maildev.ini <<EOF
+    ; #ddev-generated
+    ; Container name, not the service name: every project shares ddev_default,
+    ; where a plain "maildev" is ambiguous.
+    [PHP]
+    sendmail_path="/usr/local/bin/mailpit sendmail -t --smtp-addr ddev-${DDEV_SITENAME}-maildev:1025"
+    EOF
+
+  - |
+    #ddev-description: Tell the web container where MailDev listens
+    ddev dotenv set .ddev/.env.web.maildev \
+      --maildev-smtp-host="ddev-${DDEV_SITENAME}-maildev" \
+      --maildev-smtp-port=1025
+
+  - |
+    <?php
+    #ddev-description: Register the MailDev MCP server
+    require 'maildev/scripts/setup-mcp.php';
+
+  - |
+    #ddev-description: MailDev installed
+    echo
+    echo "MailDev is installed. Run 'ddev restart' to start it."
+    echo
+    echo "  Inbox:  ddev maildev"
+    echo "  Login:  see .ddev/.env.maildev.local"
+    echo
+    echo "PHP mail() is redirected automatically. If your framework speaks SMTP"
+    echo "directly, point it at \$MAILDEV_SMTP_HOST:\$MAILDEV_SMTP_PORT - see the README."
+    echo
+    echo "Your MCP client picks the server up from .mcp.json on its next start."
+
+removal_actions:
+  - |
+    <?php
+    #ddev-description: Remove the MailDev MCP server from .mcp.json
+    $argv[1] = 'remove';
+    require 'maildev/scripts/setup-mcp.php';
+
+  - |
+    #ddev-description: Remove the generated PHP and environment files
+    if [ -f .ddev/php/maildev.ini ]; then
+      if grep -q '#ddev-generated' .ddev/php/maildev.ini; then
+        rm -f .ddev/php/maildev.ini
+      else
+        echo "Skipping .ddev/php/maildev.ini: it has been modified."
+      fi
+    fi
+    rm -f .ddev/.env.web.maildev
+    if [ -f .ddev/.env.maildev.local ]; then
+      echo "Left .ddev/.env.maildev.local in place; it may hold your own settings."
+    fi
+
+  - |
+    #ddev-description: Remove the MailDev container and its stored mail
+    container="ddev-${DDEV_SITENAME}-maildev"
+    volume="ddev-${DDEV_SITENAME}-maildev-mail"
+    # The label filter keeps a same-named foreign container from being removed.
+    if [ -n "$(docker ps -aq --filter "name=^${container}$" --filter "label=com.ddev.site-name=${DDEV_SITENAME}")" ]; then
+      docker rm -f "${container}" >/dev/null || echo "Could not remove ${container}; remove it by hand."
+    fi
+    if docker volume inspect "${volume}" >/dev/null 2>&1; then
+      echo "Removing ${volume}; captured mail is deleted with it."
+      docker volume rm "${volume}" >/dev/null || echo "Could not remove ${volume}; remove it by hand."
+    fi
+
+  - |
+    #ddev-description: MailDev removed
+    echo "Run 'ddev restart' to return PHP mail to DDEV's built-in Mailpit."

@@ -1,0 +1,30 @@
+#ddev-generated
+services:
+  maildev:
+    # Docker creates a missing mountpoint as root, which the node user cannot
+    # write to; creating it in the image makes a fresh volume inherit node.
+    image: ${MAILDEV_IMAGE:-maildev/maildev:3.0.0-rc.3}-${DDEV_SITENAME}-built
+    build:
+      dockerfile_inline: |
+        FROM ${MAILDEV_IMAGE:-maildev/maildev:3.0.0-rc.3}
+        USER root
+        RUN mkdir -p /home/node/mail && chown node:node /home/node/mail
+        USER node
+    container_name: ddev-${DDEV_SITENAME}-maildev
+    hostname: ${DDEV_SITENAME}-maildev
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: ${DDEV_APPROOT}
+    environment:
+      VIRTUAL_HOST: ${DDEV_HOSTNAME}
+      HTTPS_EXPOSE: 1081:1080
+      MAILDEV_MCP: "true"
+      MAILDEV_MAIL_DIRECTORY: /home/node/mail
+    volumes:
+      - maildev-mail:/home/node/mail
+    x-ddev:
+      describe-url-port: "1081"
+
+volumes:
+  maildev-mail:
+    name: ddev-${DDEV_SITENAME}-maildev-mail

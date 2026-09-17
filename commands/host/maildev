@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+## Description: Open the MailDev inbox
+## Usage: maildev
+## Example: "ddev maildev"
+
+ddev launch :1081

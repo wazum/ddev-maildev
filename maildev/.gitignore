@@ -1,0 +1,4 @@
+#ddev-generated
+# Local installation state, not configuration: it records what this add-on wrote
+# to .mcp.json so removal can tell its own entry from one you edited.
+/mcp-state.json
